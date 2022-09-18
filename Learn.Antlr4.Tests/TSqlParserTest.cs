@@ -1,0 +1,271 @@
+using System.Text.Json;
+using Antlr4.Grammars.TSql;
+using Antlr4.Runtime;
+using Antlr4.Runtime.Tree;
+using Learn.Antlr4.TSql;
+using Xunit.Abstractions;
+
+namespace Learn.Antlr4.Tests;
+
+public class TSqlParserTest
+{
+    private readonly ITestOutputHelper _testOutputHelper;
+
+    public TSqlParserTest(ITestOutputHelper testOutputHelper)
+    {
+        _testOutputHelper = testOutputHelper;
+    }
+
+    private TSqlParser Parse(string code)
+    {
+        var lexer = new TSqlLexer(new AntlrInputStream(code));
+        var codeTokenStream = new CommonTokenStream(lexer);
+        var parser = new TSqlParser(codeTokenStream);
+        if (parser == null)
+        {
+            throw new NullReferenceException();
+        }
+        return parser;
+    }
+
+    private void PrintResult(object obj) {
+        var options = new JsonSerializerOptions { WriteIndented = true };
+        string jsonString = JsonSerializer.Serialize(obj, options);
+        _testOutputHelper.WriteLine(jsonString);
+    }
+
+    [Fact]
+    public void CreateSqlTableSynapseTest()
+    {
+        // arrange
+        var code = @"
+        CREATE TABLE [Monty].[Spam]
+        (
+            Meat int
+        )
+        WITH
+        (
+            CLUSTERED COLUMNSTORE INDEX,
+            DISTRIBUTION = HASH(Meat)
+        );
+
+        CREATE TABLE [Monty].[Eggs]
+        (
+            Ham int,
+            Chilli int,
+            Milk int
+        )
+        WITH
+        (
+            CLUSTERED INDEX(Ham DESC, Chilli ASC, Milk),
+            DISTRIBUTION = ROUND_ROBIN
+        );
+
+        CREATE TABLE [Monty].[Coconut]
+        (
+            LumberJack int
+        )
+        WITH
+        (
+            DISTRIBUTION = REPLICATE,
+            HEAP
+        );
+        ";
+        var parser = Parse(code);
+        var tree = parser.tsql_file();
+        var listener = new GetTablesNameListener();
+
+        // act
+        ParseTreeWalker.Default.Walk(listener, tree);
+        PrintResult(listener.TablesName);
+        
+        // assert
+        Assert.Equal(3, listener.TablesName.Count);
+        Assert.Equal("[Monty].[Spam]", listener.TablesName[0]);
+    }
+
+    [Fact]
+    public void CreateSqlTableTest()
+    {
+        // arrange
+        var code = @"
+        -- Create Table With Index Option
+        CREATE TABLE dbo.TestTable (
+        TableID uniqueidentifier NOT NULL,
+        Value nvarchar(64) NOT NULL
+        CONSTRAINT PK_TestTable_ID PRIMARY KEY (TableID) WITH (DATA_COMPRESSION = PAGE))
+        GO
+
+        -- Create Table With Index Option and Table Option
+        CREATE TABLE dbo.TestTable (
+        TableID uniqueidentifier NOT NULL,
+        Value nvarchar(64) NOT NULL,
+        Name nvarchar(64) NOT NULL,
+        ModifiedDateUTC SMALLDATETIME,
+        CONSTRAINT UQ_TestTable_ID  UNIQUE (Value) WITH (DATA_COMPRESSION = PAGE),
+        CONSTRAINT PK_TestTable_ID PRIMARY KEY (TableID, Name))
+        WITH (DATA_COMPRESSION = PAGE)
+        GO
+
+        -- Alter table drop constraint in transaction
+        IF NOT EXISTS (SELECT * FROM sys.columns cols
+        JOIN sys.types AS types ON cols.user_type_id = types.user_type_id
+        WHERE object_id = OBJECT_ID('dbo.TestTable')
+        AND cols.name = 'ModifiedDateUTC'
+        AND types.name = 'datetime')
+        BEGIN
+        BEGIN TRAN
+            ALTER TABLE dbo.TestTable DROP CONSTRAINT DF_ModifiedDate;
+        COMMIT TRAN
+        END
+        GO
+
+        -- Alter table drop multiple constraints in transaction
+        IF NOT EXISTS (SELECT * FROM sys.columns cols
+        JOIN sys.types AS types ON cols.user_type_id = types.user_type_id
+        WHERE object_id = OBJECT_ID('dbo.TestTable')
+        AND cols.name = 'ModifiedDateUTC'
+        AND types.name = 'datetime')
+        BEGIN
+        BEGIN TRAN
+            ALTER TABLE dbo.TestTable DROP CONSTRAINT DF_ModifiedDate;
+            ALTER TABLE dbo.TestTable DROP CONSTRAINT UQ_TestTable_ID;
+        COMMIT TRAN
+        END
+        GO
+
+        -- Alter table Add Constraint with Default
+        ALTER TABLE dbo.TestTable ADD CONSTRAINT DF_ModifiedDateUTC DEFAULT(GETUTCDATE()) FOR ModifiedDateUTC;
+        GO
+
+        -- Alter table Alter Column
+        ALTER TABLE dbo.TestTable ALTER COLUMN ModifiedDateUTC DATETIME
+        GO
+
+        -- Alter table Rebuild with Table Options
+        ALTER TABLE TestTable REBUILD WITH (DATA_COMPRESSION = PAGE, ONLINE=ON);
+        GO
+
+        -- Create Table with Specified Order in Constraint
+        CREATE TABLE [dbo].[TestTable] (
+        TableID UNIQUEIDENTIFIER NOT NULL,
+        Value NVARCHAR(64) NOT NULL,
+        Name NVARCHAR(64) NOT NULL,
+        CONSTRAINT [PK_TestTable_Value] PRIMARY KEY CLUSTERED (
+            [TableID] ASC,
+            [Value] ASC))
+        GO
+
+        -- Create Table with NOT NULL and DEFAULT Constraint
+        CREATE TABLE [dbo].[TestTable] (
+        TableID UNIQUEIDENTIFIER NOT NULL,
+        Name NVARCHAR(64) NOT NULL,
+        Value BIT CONSTRAINT DF_TestTable_Value NOT NULL DEFAULT (0))
+        WITH (DATA_COMPRESSION = PAGE)
+        GO
+
+        -- Create Table with indices
+        CREATE TABLE [dbo].[TestTable] (
+        Name NVARCHAR(64) NOT NULL,
+        K NVARCHAR(64) NOT NULL,
+        Value NVARCHAR(64) NOT NULL,
+        Guid NVARCHAR(64) NOT NULL,
+        index ix_name UNIQUE CLUSTERED (Name),
+        INDEX ix_k UNIQUE NONCLUSTERED (K),
+        INDEX ix_value NONCLUSTERED (Value),
+        INDEX ix_guid UNIQUE (Guid))
+        GO
+
+        -- Create Table with column store index
+        CREATE TABLE [dbo].[TestTable] (
+        Name NVARCHAR(64) NOT NULL,
+        Value NVARCHAR(64) NOT NULL,
+        Guid NVARCHAR(64) NOT NULL,
+        index ix_store CLUSTERED COLUMNSTORE,
+        index ix_value_guid COLUMNSTORE (Value, Guid),
+        index ix_value_name NONCLUSTERED (Value, Name)
+        )
+
+        -- Drop Column
+        IF EXISTS(SELECT * FROM sys.columns WHERE NAME = N'Name' AND Object_ID = Object_ID(N'dbo.TestTable'))
+        BEGIN
+        ALTER TABLE dbo.TestTable
+        DROP COLUMN Name
+        END
+        GO
+
+        -- Drop Columns
+        ALTER TABLE dbo.TestTable
+        DROP COLUMN Name, Value
+        GO
+
+        -- Drop Index Using Fully Qualified Name
+        DROP INDEX dbo.TestTable.UIX_TestTable_Name_Value
+        GO
+
+        -- Alter Table Add Column With Default Constraint First
+        ALTER TABLE TestTable
+        ADD Value BIT
+        CONSTRAINT DF_TestTable_Value DEFAULT(0) NOT NULL
+        GO
+
+        -- Alter Table Add Column With Null Constraint First
+        ALTER TABLE TestTable
+        ADD Value BIT
+        CONSTRAINT DF_TestTable_Value NOT NULL DEFAULT(0)
+        GO
+
+        -- Alter Table Add Constraint To Column
+        ALTER TABLE dbo.TestTable 
+        ADD CONSTRAINT DF_TestTable_Value DEFAULT(0) 
+        FOR Value
+        GO
+
+        -- Alter Table Add Constraint With String Concatenation
+        ALTER TABLE dbo.TestTable
+        ADD CONSTRAINT DF_Name
+        DEFAULT('NONE_' + CONVERT(NVARCHAR(40),NEWID())) 
+        FOR Name
+        GO
+
+        ALTER TABLE dbo.TestTable  WITH NOCHECK ADD  CONSTRAINT [FK_NAME] FOREIGN KEY([StateId])
+        REFERENCES dbo.TableState (ID)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+        GO
+
+        ALTER TABLE [dbo].[TestTable] WITH CHECK ADD FOREIGN KEY([StateId])
+        REFERENCES [dbo].[TableState] ([Id])
+        GO
+
+        ALTER TABLE [dbo].[TestTable] ADD  CONSTRAINT [constraintName]  DEFAULT (NEXT VALUE FOR [dbo].[sequence]) FOR [ID]
+        GO
+
+        ALTER TABLE [dbo].[TestTable]  WITH CHECK ADD  CONSTRAINT [constraintName] CHECK  ([StartDate] < [EndDate])
+        GO
+
+        ALTER TABLE [dbo].[TestTable] NOCHECK CONSTRAINT [constraintName]
+        GO
+
+        -- Alter Table Switch Partition
+        ALTER TABLE Source SWITCH PARTITION 1 TO Target PARTITION 1
+        GO
+        ALTER TABLE Source SWITCH TO Target PARTITION 1
+        GO
+        ALTER TABLE Source SWITCH PARTITION 1 TO Target WITH WAIT_AT_LOW_PRIORITY ( MAX_DURATION = 0 minutes, ABORT_AFTER_WAIT = NONE)
+        GO
+        ALTER TABLE Source SWITCH TO Target PARTITION $PARTITION.PF_TEST_DT( '20121201' )
+        GO";
+        var parser = Parse(code);
+        var tree = parser.tsql_file();
+        var listener = new GetTablesNameListener();
+
+        // act
+        ParseTreeWalker.Default.Walk(listener, tree);
+        PrintResult(listener.TablesName);
+        
+        // assert
+        Assert.Equal(6, listener.TablesName.Count);
+        Assert.Equal("dbo.TestTable", listener.TablesName[0]);
+    }
+}
