@@ -36,7 +36,7 @@ In this project, we will explore how to parse a T-SQL script and get all tables 
     antlr4 -Dlanguage=CSharp grammars/tsql/TSqlLexer.g4 grammars/tsql/TSqlParser.g4 -o Learn.Antlr4/Antlr4.Grammars.TSql/ -package Antlr4.Grammars.TSql
 ```
 
-Now that the code is generate lets create simple listener with a test.
+See Learn.Antlr4.Tests\TSqlParserTest.cs
 
 ## CSharp Parser
 
@@ -45,3 +45,5 @@ In this part of the project, we will explore hot to parse a CSharp file from a "
 ``` bash
     antlr4 -Dlanguage=CSharp grammars/csharp/CSharpLexer.g4 grammars/csharp/CSharpParser.g4 grammars/csharp/CSharpPreprocessorParser.g4 -o Learn.Antlr4/Antlr4.Grammars.CSharp/ -package Antlr4.Grammars.CSharp
 ```
+
+See Learn.Antlr4.Tests\CSharpParserTest.cs
