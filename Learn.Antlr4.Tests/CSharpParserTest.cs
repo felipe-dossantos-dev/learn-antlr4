@@ -54,7 +54,7 @@ public class CSharpParserTest
 
             private void updateModelo(Modelo modelo)
             {
-                var command = ""UPDATE modelo SET valor = @valor, data = @data WHERE id = @id;"";
+                var command = @""UPDATE modelo SET valor = @valor, data = @data WHERE id = @id;"";
                 DalIndividual.command.Parameters.Clear();
                 var parameters = DalIndividual.command.Parameters;
                 parameters.AddWithValue(""@valor"", modelo.valor);
@@ -77,12 +77,12 @@ public class CSharpParserTest
         var expected = new QueryModel
         {
             Name = "getParametro",
-            Params = new Dictionary<string, string> 
+            Params = new Dictionary<string, string>
             {
                 ["param"] = "string"
             },
             Return = "int",
-            SQLQuery = "\"SELECT parametro FROM parametros_gerais WHERE UPPER(nome_parametro) = @param;\""
+            SQLQuery = "SELECT parametro FROM parametros_gerais WHERE UPPER(nome_parametro) = @param;"
         };
         var actual = listener.Queries[0];
         Assert.Equal(expected.Name, actual.Name);
@@ -94,17 +94,37 @@ public class CSharpParserTest
         expected = new QueryModel
         {
             Name = "updateModelo",
-            Params = new Dictionary<string, string> 
+            Params = new Dictionary<string, string>
             {
                 ["modelo"] = "Modelo"
             },
             Return = null,
-            SQLQuery = "\"UPDATE modelo SET valor = @valor, data = @data WHERE id = @id;\""
+            SQLQuery = "UPDATE modelo SET valor = @valor, data = @data WHERE id = @id;"
         };
         actual = listener.Queries[1];
         Assert.Equal(expected.Name, actual.Name);
         Assert.Equal(expected.Params, actual.Params);
         Assert.Null(actual.Return);
         Assert.Equal(expected.SQLQuery, actual.SQLQuery);
+    }
+
+    [Fact]
+    public void GenerateNewQueryMethod()
+    {
+        // arrange
+        // act
+        var result = RoslynRepositoryGenerator.GenerateRepository(new QueryModel
+        {
+            Name = "updateModelo",
+            Params = new Dictionary<string, string>
+            {
+                ["modelo"] = "Modelo"
+            },
+            Return = null,
+            SQLQuery = "UPDATE modelo SET valor = @valor, data = @data WHERE id = @id;"
+        });
+        _testOutputHelper.WriteLine(result);
+        // assert
+        Assert.NotNull(result);
     }
 }

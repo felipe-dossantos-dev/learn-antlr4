@@ -18,9 +18,10 @@ public partial class GetQueryMethodListener : CSharpParserBaseListener
             || text.Contains("delete")
             || text.Contains("insert"))
         {
+            text = context.GetText().TrimStart('@').TrimStart('"').TrimEnd('"');
             ActualModel = new QueryModel 
             {
-                SQLQuery = context.GetText()
+                SQLQuery = text
             };
         }
     }
