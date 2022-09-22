@@ -126,5 +126,10 @@ public class CSharpParserTest
         _testOutputHelper.WriteLine(result);
         // assert
         Assert.NotNull(result);
+        Assert.Contains("public class ModeloRepository", result);
+        Assert.Contains("public void updateModelo(Modelo modelo)", result);
+        Assert.Contains("var command", result);
+        Assert.Contains("using (var connection = GetDefaultConnection())", result);
+        Assert.Contains("return connection.QueryFirstOrDefault<Base>(command, new { modelo });", result);
     }
 }

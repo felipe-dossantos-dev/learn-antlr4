@@ -50,6 +50,10 @@ public class RoslynRepositoryGenerator
     private static MethodDeclarationSyntax GenerateMethod(QueryModel model)
     {
         var returnType = model.Return ?? "void";
+        if (model.Name == null)
+            throw new NullReferenceException();
+        if (model.SQLQuery == null)
+            throw new NullReferenceException();
         var method = SyntaxFactory.MethodDeclaration(
                 returnType: SyntaxFactory.ParseTypeName(returnType),
                 identifier: model.Name
@@ -68,27 +72,6 @@ public class RoslynRepositoryGenerator
             ssl = ssl.Add(ps);
         }
         method = method.AddParameterListParameters(ssl.ToArray());
-        // public Base Get(int idBase)
-        // {
-        //     var command = @"    SELECT id_Base, nm_Base, id_servidor, nm_servidor, de_Ip, de_Porta, de_Senha, de_Usuario, de_Database
-        //                         FROM andersonnascim.tb_bas_base
-        //                         JOIN andersonnascim.tb_bse_baseservidor
-        //                         ON  id_Servidor_bse = id_servidor
-        //                         WHERE id_Base = @idBase;";
-        //     using (var connection = GetDefaultConnection())
-        //     {
-        //         return connection.QueryFirstOrDefault<Base>(command, new { idBase });
-        //     }
-        // }
-
-        // public void UpdateCountAndDataUltimaAlteracaoByIdentificacao(LogAlerta logAlerta)
-        // {
-        //     var command = @" UPDATE tb_lga_logalertaavicultura 
-        //                      SET vl_count = IFNULL(vl_count, 0) + 1, 
-        //                          dt_UltimoAlerta = @dt_Alerta 
-        //                      WHERE vl_identificacao = @vl_identificacao";
-        //     Execute(command, new { logAlerta.dt_Alerta, logAlerta.vl_identificacao });
-        // }
 
         var commandDeclarator = SyntaxFactory.VariableDeclarator("command")
                                 .WithInitializer(
@@ -113,6 +96,12 @@ public class RoslynRepositoryGenerator
                             SyntaxFactory.SingletonSeparatedList<VariableDeclaratorSyntax>(commandDeclarator)
                         ));
 
+        var anonymousMember = model
+                            .Params
+                            .Select(x => SyntaxFactory.AnonymousObjectMemberDeclarator(SyntaxFactory.IdentifierName(x.Key)))
+                            .ToList();
+        var anonymousMemberList = SyntaxFactory.SeparatedList<AnonymousObjectMemberDeclaratorSyntax>(anonymousMember);
+
         var usingStatement = SyntaxFactory.UsingStatement(
              SyntaxFactory.Block(
                  SyntaxFactory.SingletonList<StatementSyntax>(
@@ -135,10 +124,8 @@ public class RoslynRepositoryGenerator
                                              SyntaxFactory.IdentifierName("command")),
                                          SyntaxFactory.Token(SyntaxKind.CommaToken),
                                          SyntaxFactory.Argument(
-                                             SyntaxFactory.AnonymousObjectCreationExpression(
-                                                 SyntaxFactory.SingletonSeparatedList<AnonymousObjectMemberDeclaratorSyntax>(
-                                                     SyntaxFactory.AnonymousObjectMemberDeclarator(
-                                                         SyntaxFactory.IdentifierName("idBase")))))})))))))
+                                             SyntaxFactory.AnonymousObjectCreationExpression(anonymousMemberList))
+                                        })))))))
          .WithDeclaration(
              SyntaxFactory.VariableDeclaration(
                  SyntaxFactory.IdentifierName(
@@ -162,8 +149,10 @@ public class RoslynRepositoryGenerator
         return method;
     }
 
-    public static string FormatName(string name)
+    public static string FormatName(string? name)
     {
+        if (name == null)
+            return "";
         return name
             .Replace("get", "")
             .Replace("update", "")
